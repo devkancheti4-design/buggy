@@ -15,7 +15,9 @@ when: 92ef0835 "credentials: tidy the lockout comparisons" introduced the failur
 ```
 
 That is a real 41,000-line FastAPI project (Mealie), one red test whose traceback said only
-`assert 200 == 423`, 294 seconds, and the two lines it names are exactly the two the guilty commit changed.
+`assert 200 == 423`, 294 seconds for the three lanes above, nine minutes with the mutation lane on, and the two
+lines it names are exactly the two the guilty commit changed. The mutation lane names the repair as well: `>`
+back to `>=` on both.
 
 ## Install
 

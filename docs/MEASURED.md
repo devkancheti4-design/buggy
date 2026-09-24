@@ -220,7 +220,7 @@ The budget is a measurement, reported with every verdict.
 | case | cause law | **mutation law** | cost |
 |---|---|---|---|
 | adversarial battery, 11 cases | 6.5 | **9.5** — guilty line first in 9 | seconds, except 900 mutants / 3 min on each 2,000-line file |
-| mealie, planted lockout off-by-one, 41k lines | 1, 2 | **1, 2**, repair `> → >=` named on both | 44 mutants, 246 s |
+| mealie, planted lockout off-by-one, 41k lines | 1, 2 | **1, 2**, repair `> → >=` named on both | 45 mutants, 244 s; the whole run 9 min (suite 4:02, bisect 0:45, trace 0:10, mutation 4:05) |
 | click `762c97ee`, 12.1 years, core.py 3,635 lines | 28 | **1** | 400 mutants, 656 s |
 | click `70c673d3`, 10.6 years | 11 | 42 | 396 mutants, 104 s |
 | click `2468b709`, 11.9 years, termui.py | 20 | **3** | 398 mutants, 691 s |
