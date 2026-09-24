@@ -615,7 +615,9 @@ def when(root: str, python: str, ids: list[str], good: str | None = None, lookba
         r = subprocess.run(["git", "-C", str(wt), "bisect", "run", sys.executable, "-B", str(stage / "_step.py"),
                             str(stage / "overlay.json"), python, "120", json.dumps(extra_args or []), *ids],
                            capture_output=True, text=True, timeout=budget_s)
-        m = re.search(r"([0-9a-f]{40}) is the first bad commit", r.stdout + r.stderr)
+        # git 2.4x prints "is the first bad commit"; newer git quotes it: "is the first 'bad' commit"
+        # (found by CI on ubuntu 2026-09-24: every bisect "did not converge" there)
+        m = re.search(r"([0-9a-f]{40}) is the first '?bad'? commit", r.stdout + r.stderr)
         runs += len(re.findall(r"Bisecting:", r.stdout))
         if not m:
             mm = re.search(r"could be any of:\n((?:[0-9a-f]{40}\n)+)", r.stdout + r.stderr)
