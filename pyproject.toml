@@ -1,0 +1,28 @@
+[project]
+name = "buggy"
+version = "0.1.0"
+description = "Where, when and why your test suite went red — the line, the commit, the divergence — from evidence and two integer laws. No model."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "AGPL-3.0-or-later"
+authors = [{ name = "devkancheti4-design" }]
+dependencies = [
+  "pytest>=8",
+  "pytest-cov>=5",
+]
+
+[project.scripts]
+buggy = "buggy.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+buggy = ["laws/*.c"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

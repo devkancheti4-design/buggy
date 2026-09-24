@@ -1,0 +1,65 @@
+{
+  "name": "buggy",
+  "displayName": "buggy \u2014 the bug crawls to the root cause",
+  "description": "A pixel bug in the status bar that twitches when your suite is red; a command that locates the root cause by evidence and a generated law; the bug crawls your executed lines in the editor and stops where the law ruled. No model.",
+  "version": "0.1.0",
+  "publisher": "devkancheti4-design",
+  "license": "AGPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/devkancheti4-design/buggy"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Testing",
+    "Other"
+  ],
+  "icon": "media/icon.png",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "buggy.locate",
+        "title": "buggy: locate the bug"
+      },
+      {
+        "command": "buggy.crawl",
+        "title": "buggy: crawl to the bug"
+      },
+      {
+        "command": "buggy.scan",
+        "title": "buggy: scan every workspace folder"
+      }
+    ],
+    "configuration": {
+      "title": "buggy",
+      "properties": {
+        "buggy.path": {
+          "type": "string",
+          "default": "buggy",
+          "description": "The buggy executable (a venv's bin/buggy works)."
+        },
+        "buggy.python": {
+          "type": "string",
+          "default": "",
+          "description": "The interpreter that runs the target's suite (default: the project's own .venv, else the one buggy runs under)."
+        },
+        "buggy.bisect": {
+          "type": "boolean",
+          "default": false,
+          "description": "Also bisect the commit that introduced it (slower)."
+        },
+        "buggy.onSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Locate again when a .py file is saved."
+        }
+      }
+    }
+  }
+}
