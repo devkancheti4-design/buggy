@@ -1,0 +1,60 @@
+# Publishes to PyPI via Trusted Publishing (OIDC) — no token stored anywhere.
+# One-time setup on PyPI (must be done in the browser by the project owner):
+#   pypi.org -> Your account -> Publishing -> Add a new pending publisher:
+#     project:  buggy-cli
+#     owner:    devkancheti4-design
+#     repo:     buggy
+#     workflow: publish.yml
+#     environment: pypi
+# Then publishing a GitHub release (or pushing a v* tag) uploads that version;
+# whichever comes second is a no-op, not a failure.
+name: publish
+on:
+  release:
+    types: [published]
+  push:
+    tags: ["v*"]
+
+jobs:
+  # Gate: nothing reaches PyPI unless the suite is green on the tagged commit.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install -e . pytest pytest-cov
+      - run: git config --global user.email ci@example.com && git config --global user.name ci
+      - run: python -m pytest tests/ -q
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install build && python -m build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: [test, build]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # A tag push and the GitHub Release made from it both trigger this
+          # workflow; the second run must not fail on PyPI's file-name-reuse rule.
+          skip-existing: true

@@ -20,8 +20,11 @@ That is a real 41,000-line FastAPI project (Mealie), one red test whose tracebac
 ## Install
 
 ```bash
-pip install git+https://github.com/devkancheti4-design/buggy
+pip install buggy-cli
 ```
+
+(The name `buggy` on PyPI is an unrelated 2019 placeholder; the package installs the `buggy` module and
+the `buggy` command.)
 
 Your project needs `pytest-cov` in **its own** virtualenv (buggy finds a `.venv` or `venv` beside the code
 by itself; anything else, pass `--python`). Check before the first run:
