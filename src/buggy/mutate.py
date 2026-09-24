@@ -182,78 +182,110 @@ class Lab:
         return {i: ("fail" if any(f == i or f.startswith(i + "[") for f in failed) else "pass") for i in ids}, out
 
 
+def line_bits(lab: "Lab", rel: str, ln: int, ms: list, ids: list, failing_all: list, judged: str,
+              base_sig: str) -> tuple[dict, list, int]:
+    """The eight bits of ONE line from its mutants, run in `lab`. The same function serves the single lane
+    and every hive worker, so the bits cannot differ by who measured them. Returns (bits, repairs, ran)."""
+    path = lab.copy / rel
+    src = path.read_text(encoding="utf-8"); lines = src.split("\n")
+    fails = set(failing_all); passing = [t for t in ids if t not in fails]
+    b = {k: 0 for k in BITS}; ran = 0; broke_every = True; any_change = False; repairs = []
+    for m in ms:
+        two = list(lines); two[ln - 1] = m.line
+        path.write_text("\n".join(two), encoding="utf-8")
+        try:
+            res, mout = lab.run(ids)
+        finally:
+            path.write_text(src, encoding="utf-8")
+        ran += 1
+        if all(v == "error" for v in res.values()):
+            b["MOVES"] = 1; any_change = True              # raised where the original did not: a changed outcome
+            continue                                        # and nothing passed, so it broke
+        jg = res.get(judged) == "pass"
+        allg = all(res.get(t) == "pass" for t in failing_all)
+        broke = any(res.get(t) != "pass" for t in passing)
+        if jg:
+            b["FLIP"] = 1; any_change = True
+            if m.edit:
+                b["EDIT"] = 1
+        if allg:
+            b["ALL"] = 1
+        if allg and not broke:
+            b["CLEAN"] = 1
+            repairs.append({"file": rel, "line": ln, "was": lines[ln - 1], "now": m.line, "edit": m.describe})
+        if not jg and signature(mout, judged) != base_sig:
+            b["MOVES"] = 1; any_change = True
+        if broke:
+            any_change = True
+        else:
+            broke_every = False
+    if ran:
+        b["BREAKS"] = int(broke_every and bool(passing))
+        b["SILENT"] = int(not any_change)
+    return b, repairs, ran
+
+
+def plan(root: str, order: list, covering: dict, failing_all: list, per_line: int, sample: int) -> list:
+    """The jobs, in the presented order: (rel, line, mutants, ids). Lines with no applicable operator are
+    left out — unmeasured, not silent."""
+    fails = set(failing_all); jobs = []; cache = {}
+    for rel, ln in order:
+        if rel not in cache:
+            try:
+                cache[rel] = Path(root, rel).read_text(encoding="utf-8")
+            except OSError:
+                cache[rel] = None
+        if cache[rel] is None:
+            continue
+        ms = mutants_of(cache[rel], ln, per_line)
+        if not ms:
+            continue
+        passing = [t for t in covering.get((rel, ln), []) if t not in fails][:sample]
+        jobs.append((rel, ln, ms, list(failing_all) + passing))
+    return jobs
+
+
+def _finish(results: dict, repairs: list, mutants_run: int, runs: int, t0: float, cut: int, note=None) -> dict:
+    flips = [k for k, b in results.items() if b.get("FLIP")]
+    if len(flips) == 1:
+        results[flips[0]]["UNIQUE"] = 1
+    return {"lines": results, "measured": len(results), "mutants": mutants_run, "runs": runs,
+            "seconds": round(time.time() - t0, 1), "cut": cut, "repairs": repairs, "note": note}
+
+
 def measure(root: str, python: str, failing_all: list, judged: str, order: list, covering: dict,
             extra_args=None, budget_mutants: int = 300, budget_s: int = 240, per_line: int = 6,
-            sample: int = 3, progress=None) -> dict:
+            sample: int = 3, progress=None, jobs: int = 1) -> dict:
     """The eight bits for the lines in `order`, first to last, until the budget ends.
 
     covering: {(rel, line): [test ids that execute it]} from the spectrum. Returns lines (bits per measured
     line), the cost (lines measured, mutants, test runs, seconds, lines cut by the budget), the repairs
-    (CLEAN mutants, as source lines), and a note when nothing could be measured."""
+    (CLEAN mutants, as source lines), and a note when nothing could be measured. With jobs > 1 the work is
+    done by a hive of worker processes, each a buggy with its own copy (see hive.py); the bits are the same
+    by construction and the budget is counted on assignment, so the verdict does not depend on scheduling."""
+    if jobs and jobs > 1:
+        from .hive import hive_measure
+        return hive_measure(root, python, failing_all, judged, order, covering, extra_args, budget_mutants,
+                            budget_s, per_line, sample, progress, jobs)
     tell = progress or (lambda *a: None)
-    t0 = time.time(); fails = set(failing_all)
+    t0 = time.time()
     lab = Lab(root, python, extra_args)
     try:
         base, out = lab.run(list(failing_all))
         if base.get(judged) != "fail":
-            return {"lines": {}, "measured": 0, "mutants": 0, "runs": lab.runs, "seconds": round(time.time() - t0, 1),
-                    "cut": len(order), "repairs": [],
-                    "note": "the project copy does not reproduce the failure, so no mutant was judged"}
+            return _finish({}, [], 0, lab.runs, t0, len(order),
+                           "the project copy does not reproduce the failure, so no mutant was judged")
         base_sig = signature(out, judged)
-        results, flips, repairs, mutants_run, cut = {}, [], [], 0, 0
-        for idx, (rel, ln) in enumerate(order):
-            path = lab.copy / rel
-            try:
-                src = path.read_text(encoding="utf-8")
-            except OSError:
-                continue
-            ms = mutants_of(src, ln, per_line)
-            if not ms:
-                continue                                              # nothing applies: unmeasured
+        results, repairs, mutants_run, cut = {}, [], 0, 0
+        todo = plan(root, order, covering, failing_all, per_line, sample)
+        for idx, (rel, ln, ms, ids) in enumerate(todo):
             if mutants_run + len(ms) > budget_mutants or time.time() - t0 > budget_s:
-                cut = len(order) - idx; break
-            passing = [t for t in covering.get((rel, ln), []) if t not in fails][:sample]
-            ids = list(failing_all) + passing
-            b = {k: 0 for k in BITS}; ran = 0; broke_every = True; any_change = False
-            lines = src.split("\n")
+                cut = len(todo) - idx; break
             tell("mutation", f"{rel}:{ln} — {len(ms)} mutants")
-            for m in ms:
-                two = list(lines); two[ln - 1] = m.line
-                path.write_text("\n".join(two), encoding="utf-8")
-                try:
-                    res, mout = lab.run(ids)
-                finally:
-                    path.write_text(src, encoding="utf-8")
-                mutants_run += 1; ran += 1
-                if all(v == "error" for v in res.values()):
-                    b["MOVES"] = 1; any_change = True          # raised where the original did not: a changed outcome
-                    continue                                    # and nothing passed, so it broke
-                jg = res.get(judged) == "pass"
-                allg = all(res.get(t) == "pass" for t in failing_all)
-                broke = any(res.get(t) != "pass" for t in passing)
-                if jg:
-                    b["FLIP"] = 1; any_change = True
-                    if m.edit:
-                        b["EDIT"] = 1
-                if allg:
-                    b["ALL"] = 1
-                if allg and not broke:
-                    b["CLEAN"] = 1; repairs.append({"file": rel, "line": ln, "was": lines[ln - 1], "now": m.line, "edit": m.describe})
-                if not jg and signature(mout, judged) != base_sig:
-                    b["MOVES"] = 1; any_change = True
-                if broke:
-                    any_change = True
-                else:
-                    broke_every = False
+            b, reps, ran = line_bits(lab, rel, ln, ms, ids, failing_all, judged, base_sig)
+            mutants_run += ran
             if ran:
-                b["BREAKS"] = int(broke_every and bool(passing) or (broke_every and not passing and False))
-                b["SILENT"] = int(not any_change)
-                results[(rel, ln)] = b
-                if b["FLIP"]:
-                    flips.append((rel, ln))
-        if len(flips) == 1:
-            results[flips[0]]["UNIQUE"] = 1
-        return {"lines": results, "measured": len(results), "mutants": mutants_run, "runs": lab.runs,
-                "seconds": round(time.time() - t0, 1), "cut": cut, "repairs": repairs, "note": None}
+                results[(rel, ln)] = b; repairs += reps
+        return _finish(results, repairs, mutants_run, lab.runs, t0, cut)
     finally:
         lab.close()

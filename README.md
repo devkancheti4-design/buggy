@@ -39,6 +39,7 @@ buggy doctor .
 
 ```bash
 buggy .                      # locate: WHERE, WHEN, WHY, on the failing test — one run of the suite
+buggy locate . -j 6          # the hive: six worker buggys on the mutation lane (default: half the cores)
 buggy locate . --no-bisect   # faster: skip the commit search
 buggy locate . --open        # jump your editor to the top line
 buggy icon .                 # the pixel bug: twitches while red; click it and it crawls to the line
@@ -71,6 +72,13 @@ the status-bar bug, the crawl through your executed lines, and the gutter mark o
   rank. A mutant that turns the whole set green is reported as a one-token repair. On by default with a
   budget (`--mutants 300 --mutate-seconds 240`, `--no-mutate` to skip); off in the editor extension unless
   `buggy.mutate` is set, because it costs minutes on a large suite.
+- **The hive.** The mutation lane is a swarm: one queen, `-j N` workers (default half the cores, at most
+  8), each worker a buggy process with its own copy of the project. The queen hands out lines in the
+  presented order and counts the budget on assignment, so *which* lines get measured never depends on
+  which worker was faster, and every worker measures with the same function the single lane uses, so the
+  bits cannot differ. Checked, not assumed: `examples/hive_fairness.py` runs each case both ways and
+  diffs every bit and every rank. `--suite-jobs N` also runs the suite under pytest-xdist workers, opt-in,
+  because that depends on the project's tests being worker-safe, not on buggy.
 
 All three laws are generated integer kernels, `src/buggy/laws/*.c`, each with an independent oracle and a
 self-check; the prompts that produced them are in `docs/laws/`. No number in them is a weight: lanes are
@@ -120,6 +128,7 @@ src/buggy/cause.py      the CAUSE law (port of laws/cause.c)
 src/buggy/omission.py   the OMISSION law (port of laws/omission.c)
 src/buggy/mutation.py   the MUTATION law (port of laws/mutation.c)
 src/buggy/mutate.py     the mutation lane's body: mutants, the project copy, the runs
+src/buggy/hive.py       the queen and the workers: the same body, N copies, budget counted on assignment
 src/buggy/float_icon.py the pixel bug (Tk, standard library only)
 src/buggy/scan.py       the workspace scan page
 vscode/                 the editor extension

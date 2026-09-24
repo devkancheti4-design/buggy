@@ -249,3 +249,27 @@ output pipe, and `subprocess.run(capture_output=True)` then waits forever — a 
 `select()` with no child alive. The lab now writes output to a file and kills the whole process group on
 timeout. And a machine with six orphaned editor language-server processes burning ten cores made every
 number of the day five times slower until they were found; `python -c pass` took 6 s.
+
+
+## The hive — the mutation lane as a swarm, tested fairly, 2026-09-24
+
+One queen plans the jobs (a job is a line and all its mutants) in the presented order; `-j N` workers,
+each a `buggy` process with its own copy of the project, take the next job when free; the budget is
+counted when a job is *assigned*, so the set of measured lines does not depend on scheduling; UNIQUE is
+settled by the queen after the last result. Every worker calls the same `line_bits` the single lane calls.
+
+`examples/hive_fairness.py`: the same four cases, the same mutant budget with time never cutting, single
+lane then a hive of six, back to back on the same machine, and every measured line's bits and every rank
+compared:
+
+| case | single lane | hive of 6 | speedup | mutants | bits identical | ranks identical |
+|---|---|---|---|---|---|---|
+| shared helper, wrong file | 4.0 s | 1.8 s | 2.2x | 16 / 16 | yes | yes |
+| data, not code | 2.6 s | 1.8 s | 1.4x | 10 / 10 | yes | yes |
+| 2,000-line file, one repair | 218.0 s | 44.0 s | **5.0x** | 902 / 902 | yes | yes |
+| five failures, one cause | 3.6 s | 1.7 s | 2.1x | 14 / 14 | yes | yes |
+
+Read it straight: the speedup is real where there is work (5x from 6 workers on 900 mutants, the rest is
+the fixed cost of the baseline run and of copying the project once per worker), and small cases are
+bounded by that fixed cost. What the hive does not change is the answer — that is the point of counting
+the budget on assignment and sharing the measuring function, and it is what the last two columns check.

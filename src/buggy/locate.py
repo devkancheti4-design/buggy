@@ -99,6 +99,7 @@ class Located:
             c = self.mutation_cost
             head = (f"by what happens when each line is CHANGED — the mutation law ({c.get('measured', 0)} lines measured, "
                     f"{c.get('mutants', 0)} mutants, {c.get('runs', 0)} test runs, {c.get('seconds', 0)} s"
+                    + (f", {c['workers']} workers" if c.get("workers", 0) > 1 else "")
                     + (f", {c['cut']} lines cut by the budget" if c.get("cut") else "") + "):")
             out.append(head)
             live = [f for f in self.mutation if f.rank > 0]
@@ -814,7 +815,8 @@ def why(root: str, python: str, out: str, failing: list[str]) -> dict:
 def locate(root: str, python: str = sys.executable, good: str | None = None, bisect: bool = True,
            trace: bool = True, top_files: int = 3, extra_args: list | None = None,
            progress=None, overlay: dict | None = None, lookback: int = 24, budget_s: int = 300,
-           mutate: bool = True, mutants: int = 300, mutate_s: int = 240) -> Located:
+           mutate: bool = True, mutants: int = 300, mutate_s: int = 240, jobs: int | None = None,
+           suite_jobs: int = 0) -> Located:
     """extra_args are passed to every pytest run (e.g. -W default, --deselect id): what an old revision
     needs to collect and to be green apart from the bug under study."""
     t0 = time.time()
@@ -827,7 +829,13 @@ def locate(root: str, python: str = sys.executable, good: str | None = None, bis
     tell("suite", "one run of the whole suite, with per-test coverage")
     sp, out = {}, ""
     try:
-        sp = spectrum(root, python, [], o.extra_args)
+        suite_args = list(o.extra_args)
+        if suite_jobs and suite_jobs > 1:
+            if subprocess.run([python, "-c", "import xdist"], capture_output=True).returncode == 0:
+                suite_args += ["-n", str(suite_jobs)]
+            else:
+                L.notes.append(f"--suite-jobs {suite_jobs} ignored: pytest-xdist is not in the project's interpreter")
+        sp = spectrum(root, python, [], suite_args)
         out = getattr(spectrum, "last_output", "")
         if "No module named pytest" in out:
             raise HarnessError(out)
@@ -1025,9 +1033,11 @@ def locate(root: str, python: str = sys.executable, good: str | None = None, bis
             order = [(f.file, f.line) for f in L.where if f.rank > 0]
             contexts = getattr(spectrum, "last_contexts", None) or {}
             covering = {k: sorted(set(v) - {"<import>"}) for k, v in contexts.items()}
+            if jobs is None:
+                jobs = max(1, min(8, (os.cpu_count() or 2) // 2))
             M = measure(root, python, L.failing_all or L.failing, L.failing[0], order, covering, o.extra_args,
-                        budget_mutants=mutants, budget_s=mutate_s, progress=tell)
-            L.mutation_cost = {k: M.get(k, 0) for k in ("measured", "mutants", "runs", "seconds", "cut")}
+                        budget_mutants=mutants, budget_s=mutate_s, progress=tell, jobs=jobs)
+            L.mutation_cost = {k: M.get(k, 0) for k in ("measured", "mutants", "runs", "seconds", "cut", "workers")}
             L.repairs = M.get("repairs", [])
             if M.get("note"):
                 L.notes.append("mutation lane: " + M["note"])
