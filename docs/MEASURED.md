@@ -273,3 +273,18 @@ Read it straight: the speedup is real where there is work (5x from 6 workers on 
 the fixed cost of the baseline run and of copying the project once per worker), and small cases are
 bounded by that fixed cost. What the hive does not change is the answer — that is the point of counting
 the budget on assignment and sharing the measuring function, and it is what the last two columns check.
+
+On Mealie (41k lines, ~1,900 tests), three runs back to back on a quiet machine, budget 300 mutants or
+900 s:
+
+| run | suite | mutation stage | mutants / lines | verdict | total |
+|---|---|---|---|---|---|
+| single lane, `-j 1` | 4:15 | 907 s, cut by time | 151 / 80 | lines 48 and 41, repair `> → >=` | 20:19 |
+| hive, `-j 6` | 4:00 | 335 s, budget reached | 300 / 174 | **identical** | 10:31 |
+| hive + `--suite-jobs 4` | 1:44 | 336 s | 298 / 164 | **wrong test judged** | 8:10 |
+
+The hive did twice the mutants in 37% of the time and changed nothing in the answer. The suite workers
+cut the suite from 4:00 to 1:44 and broke the measurement: under pytest-xdist Mealie produced failures
+that do not exist serially, the first failing test became a recipe test, and every lane judged that one.
+That is the project's tests not being worker-safe, not the lane, and it is why `--suite-jobs` is off by
+default and documented as opt-in: use it only on a suite you already run under xdist in CI.

@@ -77,8 +77,10 @@ the status-bar bug, the crawl through your executed lines, and the gutter mark o
   presented order and counts the budget on assignment, so *which* lines get measured never depends on
   which worker was faster, and every worker measures with the same function the single lane uses, so the
   bits cannot differ. Checked, not assumed: `examples/hive_fairness.py` runs each case both ways and
-  diffs every bit and every rank. `--suite-jobs N` also runs the suite under pytest-xdist workers, opt-in,
-  because that depends on the project's tests being worker-safe, not on buggy.
+  diffs every bit and every rank. On Mealie the hive did twice the mutants in a third of the time with the
+  same verdict. `--suite-jobs N` also runs the suite under pytest-xdist workers, opt-in and off by default:
+  on Mealie it halved the suite and produced failures that do not exist serially, so the wrong test was
+  judged. Use it only on a suite you already run under xdist.
 
 All three laws are generated integer kernels, `src/buggy/laws/*.c`, each with an independent oracle and a
 self-check; the prompts that produced them are in `docs/laws/`. No number in them is a weight: lanes are
