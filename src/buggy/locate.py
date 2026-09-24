@@ -624,7 +624,8 @@ def when(root: str, python: str, ids: list[str], good: str | None = None, lookba
                 return ({"commit": None, "candidates": cands, "good": good, "runs": runs},
                         f"bisect narrowed the first bad commit to {len(cands)} commits the test cannot run at "
                         f"({cands[0][:8]} … {cands[-1][:8]})")
-            return None, "bisect did not converge"
+            tail = " ".join((r.stdout + r.stderr).split())[-300:]
+            return None, f"bisect did not converge (exit {r.returncode}): …{tail}"
         bad = m.group(1)
         subject = subprocess.run(["git", "-C", root, "log", "-1", "--format=%s", bad], capture_output=True, text=True).stdout.strip()
         diff = subprocess.run(["git", "-C", root, "show", "--unified=0", "--format=", bad], capture_output=True, text=True).stdout
