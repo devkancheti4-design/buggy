@@ -136,7 +136,7 @@ footer a{color:var(--fg2)}
 <body>
 <nav><div class="wrap">
   <a class="brand" href="#"><svg width="20" height="20" viewBox="0 0 9 9" shape-rendering="crispEdges"><rect x="3" y="0" width="3" height="1" fill="#000"/><rect x="2" y="1" width="5" height="1" fill="#ff4d4d"/><rect x="1" y="2" width="7" height="4" fill="#ff4d4d"/><rect x="2" y="6" width="5" height="1" fill="#ff4d4d"/><rect x="4" y="2" width="1" height="5" fill="#000"/><rect x="2" y="3" width="1" height="1" fill="#000"/><rect x="6" y="4" width="1" height="1" fill="#000"/><rect x="0" y="3" width="1" height="1" fill="#000"/><rect x="8" y="3" width="1" height="1" fill="#000"/><rect x="0" y="5" width="1" height="1" fill="#000"/><rect x="8" y="5" width="1" height="1" fill="#000"/></svg>buggy</a>
-  <a class="lnk" href="#demo">How it works</a><a class="lnk" href="#laws">Laws</a><a class="lnk" href="#measured">Measured</a><a class="lnk" href="#install">Install</a>
+  <a class="lnk" href="#demo">How it works</a><a class="lnk" href="#laws">Laws</a><a class="lnk" href="#measured">Measured</a><a class="lnk" href="#compared">Compared</a><a class="lnk" href="#install">Install</a>
   <a class="lnk" href="https://github.com/devkancheti4-design/buggy">GitHub</a>
   <a class="cta" href="https://pypi.org/project/buggy-cli/">pip install buggy-cli</a>
 </div></nav>
@@ -230,6 +230,30 @@ footer a{color:var(--fg2)}
     <li><b>Old history.</b> Bisect gives a bound, "at least as old as", capped by how far back the test can run, and far back "red" can mean the feature did not exist.</li>
     <li><b>Speed.</b> A fresh AI agent found the Mealie bug in 37 seconds. buggy took nine minutes, because it ran 1,900 tests. Its case is that it is free, deterministic, auditable, and does not get worse when the evidence is thin.</li>
   </ul>
+</div></section>
+
+<section id="compared"><div class="wrap">
+  <div class="eyebrow">Compared</div>
+  <h2>Against a person, against an agent, against itself.</h2>
+  <p class="lead">The same Mealie failure, the same day, the same machine. The agent was fresh, read-only and given only the failing line; buggy was given the same. The engineer row is an estimate, and it is labelled as one.</p>
+  <div class="tbl"><table>
+    <tr><th>who</th><th>time to the two lines and the commit</th><th>what it costs</th></tr>
+    <tr><td>AI agent, fresh, no hints</td><td class="n"><span class="good">37 seconds</span>, 4 tool calls</td><td>tokens on every run; nondeterministic; its reasoning is the only audit trail</td></tr>
+    <tr><td>buggy, three lanes</td><td class="n">about 5 minutes</td><td>zero tokens; deterministic; every rank reduces to eight bits and a published law</td></tr>
+    <tr><td>buggy with the mutation lane, hive of six</td><td class="n">about 9 minutes</td><td>the same, plus the repair named</td></tr>
+    <tr><td>an engineer (estimate, not measured)</td><td class="n">10–20 min knowing the code; 30–60 not</td><td>attention; the test name says "lockout" and <code>git log</code> hands over the commit</td></tr>
+  </table></div>
+  <p class="note" style="margin-bottom:28px">Read it straight: on this bug the agent wins the clock by a wide margin, because this bug is friendly — the test name points at the area and the guilty commit is the last one to touch those lines. buggy's minutes are one run of 1,900 tests. Its case is not speed; it is that it runs unattended on every red build for nothing, leaves an auditable record, and does not get worse when the bug is twelve years old and the evidence is thin — see the click rows above.</p>
+  <h3 style="margin:0 0 6px">The hive, measured fairly</h3>
+  <p class="note" style="margin-bottom:14px">One queen, <code>-j N</code> worker buggys, each with its own copy of the project. The budget is counted when a line is <em>assigned</em>, so which lines get measured never depends on which worker was faster, and every worker measures with the same function the single lane uses. The harness runs each case both ways and diffs every bit and every rank.</p>
+  <div class="tbl"><table>
+    <tr><th>case</th><th>single lane</th><th>hive of 6</th><th>mutants</th><th>bits and ranks identical</th></tr>
+    <tr><td>2,000-line file, one repair</td><td class="n">218 s</td><td class="n"><span class="good">44 s</span></td><td class="n">902 / 902</td><td class="n"><span class="good">yes</span></td></tr>
+    <tr><td>shared helper, wrong file</td><td class="n">4.0 s</td><td class="n">1.8 s</td><td class="n">16 / 16</td><td class="n"><span class="good">yes</span></td></tr>
+    <tr><td>five failures, one cause</td><td class="n">3.6 s</td><td class="n">1.7 s</td><td class="n">14 / 14</td><td class="n"><span class="good">yes</span></td></tr>
+    <tr><td>Mealie, mutation stage, budget 300 mutants or 900 s</td><td class="n">907 s, cut by time, 151 mutants</td><td class="n"><span class="good">335 s</span>, 300 mutants</td><td class="n">151 / 300</td><td class="n"><span class="good">same verdict</span></td></tr>
+    <tr><td>Mealie with <code>--suite-jobs 4</code> (pytest-xdist)</td><td class="n">suite 4:00</td><td class="n">suite 1:44</td><td class="n">—</td><td class="n"><span class="bad">wrong test judged</span> — the suite is not worker-safe; the flag stays off by default</td></tr>
+  </table></div>
 </div></section>
 
 <section id="install"><div class="wrap">
