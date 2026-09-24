@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>buggy — the line, the commit, the repair</title>
+<meta name="description" content="buggy is a deterministic root-cause locator for Python test suites: one suite run, three integer laws, no model. It names the line, the commit that broke it, and the one-token repair when one exists.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#07080a; --bg2:#0d0f13; --panel:#111419; --line:#1e232b; --line2:#2a313b;
+  --fg:#e8eaee; --fg2:#a9b0bb; --dim:#6b7380;
+  --red:#ff4d4d; --red2:#b3261e; --green:#3ddc84; --amber:#ffb454; --blue:#7aa2ff; --violet:#b48cff;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace; --sans:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  --max:1120px; --r:14px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.wrap{max-width:var(--max);margin:0 auto;padding:0 16px}
+nav{position:sticky;top:0;z-index:20;background:rgba(7,8,10,.8);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;gap:22px;height:58px}
+nav .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:-.02em;text-decoration:none;margin-right:auto}
+nav a.lnk{color:var(--fg2);text-decoration:none;font-size:14px}
+nav a.lnk:hover{color:var(--fg)}
+nav .cta{background:var(--fg);color:#000;border-radius:999px;padding:8px 14px;font-weight:600;font-size:14px;text-decoration:none}
+@media (max-width:760px){nav a.lnk{display:none}}
+.hero{padding:96px 0 56px;text-align:center;position:relative;overflow:hidden}
+.hero:before{content:"";position:absolute;inset:-40% -20% auto;height:120%;background:radial-gradient(60% 50% at 50% 0%,rgba(255,77,77,.16),transparent 70%);pointer-events:none}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.22em;color:var(--fg2);text-transform:uppercase}
+h1{font-size:clamp(40px,7vw,84px);line-height:1.02;letter-spacing:-.035em;margin:14px 0 18px;font-weight:800;background:linear-gradient(180deg,#fff 0%,#c9ccd3 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{font-size:clamp(17px,2.2vw,21px);color:var(--fg2);max-width:760px;margin:0 auto}
+.tags{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin:24px 0 30px;color:var(--fg2);font-size:14px}
+.tags span:before{content:"●";color:var(--green);margin-right:8px;font-size:10px;vertical-align:middle}
+.btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.btn{border-radius:999px;padding:12px 20px;font-weight:600;text-decoration:none;font-size:15px;border:1px solid var(--line2);color:var(--fg);background:var(--panel)}
+.btn.primary{background:var(--fg);color:#000;border-color:var(--fg)}
+.btn code{font-family:var(--mono);font-size:14px}
+section{padding:72px 0;border-top:1px solid var(--line)}
+h2{font-size:clamp(28px,4vw,44px);letter-spacing:-.03em;line-height:1.1;margin:0 0 10px}
+.lead{color:var(--fg2);font-size:17px;max-width:760px;margin:0 0 34px}
+/* demo */
+.demo{display:grid;grid-template-columns:200px 1fr 320px;gap:18px;align-items:start}
+@media (max-width:980px){.demo{grid-template-columns:1fr}}
+.stages{display:flex;flex-direction:column;gap:8px}
+.stage{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);opacity:.55;transition:.3s}
+.stage.on{opacity:1;border-color:var(--red)}
+.stage.done{opacity:1;border-color:var(--green)}
+.stage b{font-family:var(--mono);font-size:12px;color:var(--dim);min-width:16px}
+.stage .t{font-weight:600;font-size:14px}
+.stage .d{color:var(--fg2);font-size:12.5px;line-height:1.35}
+.code{background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;position:relative}
+.code .bar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:12px;color:var(--fg2)}
+.code .bar .dot{width:10px;height:10px;border-radius:50%;background:#333}
+.code pre{margin:0;padding:12px 0;font-family:var(--mono);font-size:12.5px;line-height:1.75;overflow:auto;position:relative}
+.ln{display:grid;grid-template-columns:44px 1fr auto;align-items:center;padding:0 12px 0 0;position:relative;white-space:pre;transition:background .25s}
+.ln .n{color:var(--dim);text-align:right;padding-right:12px;user-select:none}
+.ln.exec .n{color:var(--fg2)}
+.ln.visit{background:rgba(255,77,77,.08)}
+.ln.win{background:rgba(61,220,132,.12);outline:1px solid rgba(61,220,132,.35)}
+.ln.mut{background:rgba(180,140,255,.14)}
+.chips{display:flex;gap:4px;padding-left:10px}
+.chip{font-size:10px;font-family:var(--mono);padding:1px 6px;border-radius:999px;border:1px solid var(--line2);color:var(--fg2);opacity:0;transform:translateY(3px);transition:.25s}
+.chip.on{opacity:1;transform:none}
+.chip.s{border-color:var(--green);color:var(--green)}
+.chip.w{border-color:var(--amber);color:var(--amber)}
+.chip.v{border-color:var(--violet);color:var(--violet)}
+#bug{position:absolute;left:14px;top:0;width:18px;height:18px;transition:top .28s cubic-bezier(.4,0,.2,1),left .28s;filter:drop-shadow(0 0 6px rgba(255,77,77,.6));pointer-events:none}
+#bug.twitch{animation:tw .48s steps(2) infinite}
+@keyframes tw{to{transform:translateX(1px) rotate(4deg)}}
+.legs{animation:legs .3s steps(2) infinite}
+@keyframes legs{to{transform:translateY(1px)}}
+.verdict{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px;font-family:var(--mono);font-size:12px;min-height:420px;display:flex;flex-direction:column;gap:10px}
+.verdict .k{color:var(--dim);font-size:11px;letter-spacing:.12em;text-transform:uppercase}
+.verdict .row{opacity:0;transform:translateY(4px);transition:.35s}
+.verdict .row.on{opacity:1;transform:none}
+.verdict .red{color:var(--red)} .verdict .green{color:var(--green)} .verdict .amber{color:var(--amber)} .verdict .violet{color:var(--violet)} .verdict .blue{color:var(--blue)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:18px}
+@media (max-width:700px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.stat .k{font-size:11px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase}
+.stat .v{font-size:26px;font-weight:800;letter-spacing:-.02em;font-family:var(--mono)}
+.controls{display:flex;gap:10px;align-items:center;margin:16px 0 0;flex-wrap:wrap}
+.controls button{background:var(--panel);color:var(--fg);border:1px solid var(--line2);border-radius:999px;padding:8px 14px;font-weight:600;cursor:pointer;font-size:14px}
+.controls button.primary{background:var(--fg);color:#000;border-color:var(--fg)}
+.controls label{color:var(--fg2);font-size:13px;display:flex;gap:8px;align-items:center}
+/* grids */
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media (max-width:860px){.g3{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:20px}
+.card h3{margin:0 0 6px;font-size:17px}
+.card p{margin:0;color:var(--fg2);font-size:14.5px}
+.card .k{font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--dim);text-transform:uppercase;margin-bottom:8px}
+.bits{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:12px}
+.bits div{font-family:var(--mono);font-size:12px;color:var(--fg2);padding:6px 8px;border:1px solid var(--line);border-radius:8px}
+.bits b{color:var(--fg)}
+/* law calculator */
+.calc{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+@media (max-width:860px){.calc{grid-template-columns:1fr}}
+.lawpick{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.lawpick button{background:var(--panel);color:var(--fg2);border:1px solid var(--line2);border-radius:999px;padding:7px 12px;cursor:pointer;font-size:13px;font-weight:600}
+.lawpick button.on{color:#000;background:var(--fg);border-color:var(--fg)}
+.switches{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.sw{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;user-select:none}
+.sw input{accent-color:var(--green);width:16px;height:16px}
+.sw .nm{font-family:var(--mono);font-size:12.5px}
+.sw .ds{font-size:12px;color:var(--fg2)}
+.rank{background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);padding:20px;text-align:center}
+.rank .big{font-size:84px;font-weight:800;letter-spacing:-.04em;line-height:1;font-family:var(--mono)}
+.rank .lanes{font-family:var(--mono);font-size:12.5px;color:var(--fg2);margin-top:10px;line-height:1.7}
+.rank .veto{color:var(--red)}
+.presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;justify-content:center}
+.presets button{background:transparent;color:var(--fg2);border:1px solid var(--line2);border-radius:999px;padding:5px 10px;font-size:12px;cursor:pointer}
+.presets button:hover{color:var(--fg);border-color:var(--fg2)}
+/* tables */
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:10px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--dim);font-weight:600;font-size:12px;letter-spacing:.1em;text-transform:uppercase}
+td.n{font-family:var(--mono)}
+td .good{color:var(--green);font-weight:600} td .bad{color:var(--red);font-weight:600}
+.tbl{overflow:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);padding:6px 4px;margin-bottom:22px}
+.note{color:var(--fg2);font-size:14.5px;max-width:820px}
+ul.honest{padding-left:20px;color:var(--fg2);font-size:15px;max-width:820px}
+ul.honest li{margin:8px 0}
+ul.honest b{color:var(--fg)}
+pre.cmd{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-family:var(--mono);font-size:13.5px;overflow:auto;margin:0 0 12px;color:var(--fg)}
+pre.cmd .c{color:var(--dim)}
+footer{border-top:1px solid var(--line);padding:36px 0;color:var(--fg2);font-size:13.5px}
+footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
+footer a{color:var(--fg2)}
+.sr{position:absolute;left:-9999px}
+</style>
+</head>
+<body>
+<nav><div class="wrap">
+  <a class="brand" href="#"><svg width="20" height="20" viewBox="0 0 9 9" shape-rendering="crispEdges"><rect x="3" y="0" width="3" height="1" fill="#000"/><rect x="2" y="1" width="5" height="1" fill="#ff4d4d"/><rect x="1" y="2" width="7" height="4" fill="#ff4d4d"/><rect x="2" y="6" width="5" height="1" fill="#ff4d4d"/><rect x="4" y="2" width="1" height="5" fill="#000"/><rect x="2" y="3" width="1" height="1" fill="#000"/><rect x="6" y="4" width="1" height="1" fill="#000"/><rect x="0" y="3" width="1" height="1" fill="#000"/><rect x="8" y="3" width="1" height="1" fill="#000"/><rect x="0" y="5" width="1" height="1" fill="#000"/><rect x="8" y="5" width="1" height="1" fill="#000"/></svg>buggy</a>
+  <a class="lnk" href="#demo">How it works</a><a class="lnk" href="#laws">Laws</a><a class="lnk" href="#measured">Measured</a><a class="lnk" href="#install">Install</a>
+  <a class="lnk" href="https://github.com/devkancheti4-design/buggy">GitHub</a>
+  <a class="cta" href="https://pypi.org/project/buggy-cli/">pip install buggy-cli</a>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">buggy</div>
+  <h1>Don't guess where<br>the bug is.</h1>
+  <p class="sub">The deterministic root-cause locator for Python test suites. One run of your suite, three integer laws, no model — and it names the line, the commit that broke it, and the one-token repair when one exists.</p>
+  <div class="tags"><span>One suite run</span><span>Zero tokens, nothing leaves your machine</span><span>Every rank reduces to eight bits and a published law</span></div>
+  <div class="btns"><a class="btn primary" href="#demo">Watch it find a real bug</a><a class="btn" href="#install"><code>pip install buggy-cli</code></a></div>
+</div></header>
+
+<section id="demo"><div class="wrap">
+  <div class="eyebrow">How it works</div>
+  <h2>A real bug, a real repo, no hints.</h2>
+  <p class="lead">Mealie is a 41,000-line FastAPI project with about 1,900 tests. One test went red and its traceback said only <code style="font-family:var(--mono)">assert 200 == 423</code>. This is what buggy did with it, replayed from the actual run. Nothing below is drawn that did not happen.</p>
+  <div class="demo">
+    <div class="stages" id="stages">
+      <div class="stage" data-s="0"><b>1</b><div><div class="t">SUITE</div><div class="d">One run of all 1,900 tests under per-test coverage. Which line did each test execute?</div></div></div>
+      <div class="stage" data-s="1"><b>2</b><div><div class="t">WHERE</div><div class="d">Every line the failing test ran gets eight bits. The <em>cause law</em> ranks them. The bug crawls the executed lines and parks where the law ruled.</div></div></div>
+      <div class="stage" data-s="2"><b>3</b><div><div class="t">WHEN</div><div class="d">Bisect in a throwaway worktree, the failing test carried into every revision.</div></div></div>
+      <div class="stage" data-s="3"><b>4</b><div><div class="t">WHY</div><div class="d">The failing test traced against its nearest passing neighbour, to the first line where the paths part.</div></div></div>
+      <div class="stage" data-s="4"><b>5</b><div><div class="t">CHANGE</div><div class="d">The <em>mutation law</em>: each suspect line altered one operator at a time in a copy of the project. Which edit turns the test green and breaks nothing?</div></div></div>
+    </div>
+    <div class="code">
+      <div class="bar"><span class="dot" style="background:#ff5f56"></span><span class="dot" style="background:#ffbd2e"></span><span class="dot" style="background:#27c93f"></span><span>mealie/core/security/providers/credentials_provider.py</span></div>
+      <pre id="pre"><svg id="bug" viewBox="0 0 9 9" shape-rendering="crispEdges" aria-hidden="true"><rect x="3" y="0" width="3" height="1" fill="#000"/><rect x="2" y="1" width="5" height="1" fill="#ff4d4d"/><rect x="1" y="2" width="7" height="4" fill="#ff4d4d"/><rect x="2" y="6" width="5" height="1" fill="#ff4d4d"/><rect x="4" y="2" width="1" height="5" fill="#000"/><rect x="2" y="3" width="1" height="1" fill="#000"/><rect x="6" y="4" width="1" height="1" fill="#000"/><g class="legs"><rect x="0" y="3" width="1" height="1" fill="#000"/><rect x="8" y="3" width="1" height="1" fill="#000"/><rect x="0" y="5" width="1" height="1" fill="#000"/><rect x="8" y="5" width="1" height="1" fill="#000"/></g></svg></pre>
+    </div>
+    <div class="verdict" id="verdict" aria-live="polite"></div>
+  </div>
+  <div class="controls">
+    <button class="primary" id="play">▶ Run buggy</button><button id="step">Step</button><button id="replay">Replay</button>
+    <label>Speed <input id="speed" type="range" min="1" max="4" value="2"></label>
+    <span id="hint" style="color:var(--fg2);font-size:13px"></span>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="k">Lines the test ran</div><div class="v" id="st-lines">–</div></div>
+    <div class="stat"><div class="k">Commit named</div><div class="v" id="st-commit">–</div></div>
+    <div class="stat"><div class="k">Mutants tried</div><div class="v" id="st-mut">–</div></div>
+    <div class="stat"><div class="k">Whole run</div><div class="v" id="st-time">–</div></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">What it reads</div>
+  <h2>Evidence, measured. Never weighed.</h2>
+  <p class="lead">Every source feeds a bit. No number in the body says how much a bit is worth: that is the law's job, and the law is a generated integer kernel you can read, run, and check exhaustively.</p>
+  <div class="g3">
+    <div class="card"><div class="k">WHERE — the cause law</div><h3>Which executed line is wrong</h3><p>Per-test coverage, the commit bisect blamed, the first divergence from a passing run, the traceback's frames, the assertion's literals, recency.</p>
+      <div class="bits"><div><b>EF_ALL</b> every failing test ran it</div><div><b>EP_NONE</b> no passing test did</div><div><b>IMPORT</b> import-time only</div><div><b>BISECT</b> the bad commit touched it</div><div><b>DIVERGE</b> paths part here</div><div><b>FRAME</b> a traceback frame</div><div><b>LITERAL</b> the assertion's value</div><div><b>RECENT</b> changed lately</div></div></div>
+    <div class="card"><div class="k">MISSING — the omission law</div><h3>Where code that does not exist belongs</h3><p>A sixth of real fixes add a line the old code never ran. No executed line is wrong, so this law ranks where the path stopped looking.</p>
+      <div class="bits"><div><b>ENDED</b> the run's last line</div><div><b>NEXT</b> the frontier stepped past</div><div><b>TARGET</b> the assertion's function</div><div><b>HEAD</b> a def or branch head</div><div><b>PASSONLY</b> only passing tests reach</div><div><b>RAISED</b> an exception, not an assert</div><div><b>DIVERGE</b> paths part here</div><div><b>RECENT</b> changed lately</div></div></div>
+    <div class="card"><div class="k">CHANGE — the mutation law</div><h3>Which line's content the outcome depends on</h3><p>Coverage is testimony: the line was present. Mutation is an experiment: change it and see whether the failure survives. Where a single edit can flip the test, this finds the line in a 3,600-line file.</p>
+      <div class="bits"><div><b>FLIP</b> a mutant greens the test</div><div><b>ALL</b> every failing test</div><div><b>CLEAN</b> and no passing test breaks</div><div><b>EDIT</b> an edit, not a deletion</div><div><b>MOVES</b> the failure changes</div><div><b>UNIQUE</b> the only line that flips</div><div><b>BREAKS</b> every mutant breaks correct code</div><div><b>SILENT</b> nothing changed</div></div></div>
+  </div>
+</div></section>
+
+<section id="laws"><div class="wrap">
+  <div class="eyebrow">Three laws, no weights</div>
+  <h2>Flip the bits. Watch the law rule.</h2>
+  <p class="lead">These are the actual kernels, ported line for line to JavaScript. Lanes are <em>counted</em>, strong or weak; the priority is the dense lexicographic rank of (strong, weak). One strong beats any number of weak because the rank says so, not because someone chose a constant. Presets are real cases from the measurements.</p>
+  <div class="calc">
+    <div>
+      <div class="lawpick" id="lawpick"><button data-l="cause" class="on">CAUSE</button><button data-l="omission">OMISSION</button><button data-l="mutation">MUTATION</button></div>
+      <div class="switches" id="switches"></div>
+    </div>
+    <div class="rank"><div class="k" style="font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--dim)">PRIORITY 0..15</div><div class="big" id="rankv">0</div><div class="lanes" id="lanes"></div><div class="presets" id="presets"></div></div>
+  </div>
+</div></section>
+
+<section id="measured"><div class="wrap">
+  <div class="eyebrow">Measured</div>
+  <h2>Read it straight.</h2>
+  <p class="lead">Every number here comes from a harness in the repo you can rerun. The misses are listed with the hits, because a locator that hides its misses is a lookup table with good PR.</p>
+  <div class="tbl"><table>
+    <tr><th>case</th><th>cause law</th><th>mutation law</th><th>cost</th></tr>
+    <tr><td>Eleven adversarial cases, built to be ambiguous</td><td class="n">6.5 / 11</td><td class="n"><span class="good">9.5 / 11</span> — first in nine</td><td>seconds; 3 min on each 2,000-line file</td></tr>
+    <tr><td>Mealie, planted lockout off-by-one, 41k lines</td><td class="n">ranks 1, 2 + commit</td><td class="n"><span class="good">ranks 1, 2 + repair</span> <code>&gt; → &gt;=</code></td><td>9 min alone, 10 min with 300 mutants on a hive of six</td></tr>
+    <tr><td>click, 12-year-old bug, core.py 3,635 lines, blind</td><td class="n">28</td><td class="n"><span class="good">1</span></td><td>400 mutants, 11 min</td></tr>
+    <tr><td>click, readline bug, 12 years, termui.py</td><td class="n">20</td><td class="n"><span class="good">3</span></td><td>398 mutants, 12 min</td></tr>
+    <tr><td>click, eight-line fix</td><td class="n">11</td><td class="n"><span class="bad">42</span> — no single edit flips it</td><td>396 mutants</td></tr>
+    <tr><td>click, pure omission (a missing <code>self.close()</code>)</td><td class="n"><span class="bad">miss</span></td><td class="n"><span class="bad">miss</span>, but a different real one-token repair found</td><td>400 mutants</td></tr>
+    <tr><td>35 real rich fixes, held out</td><td class="n">file first in 21; line top-10 in 12; never a candidate in 7</td><td class="n">—</td><td></td></tr>
+    <tr><td>Additive pipeline, sum-only test</td><td class="n">218</td><td class="n"><span class="bad">102</span> — about 80 lines are honest one-token repairs; it reports the band</td><td>900 mutants</td></tr>
+  </table></div>
+  <h3 style="margin:0 0 10px">Where it does not help</h3>
+  <ul class="honest">
+    <li><b>Fixes that are many lines.</b> No single-token mutant flips the test; the mutation law falls silent and the cause law's shortlist is what you get.</li>
+    <li><b>Omissions the failing test never runs.</b> The omission law guesses where code belongs; on held-out real fixes it reaches the line in the top 5 twice of 35.</li>
+    <li><b>Suites that pin the wrong behaviour</b> or constrain only a sum. The experiment is only as good as the tests; it says so instead of picking.</li>
+    <li><b>Old history.</b> Bisect gives a bound, "at least as old as", capped by how far back the test can run, and far back "red" can mean the feature did not exist.</li>
+    <li><b>Speed.</b> A fresh AI agent found the Mealie bug in 37 seconds. buggy took nine minutes, because it ran 1,900 tests. Its case is that it is free, deterministic, auditable, and does not get worse when the evidence is thin.</li>
+  </ul>
+</div></section>
+
+<section id="install"><div class="wrap">
+  <div class="eyebrow">Install</div>
+  <h2>Two commands.</h2>
+  <p class="lead">Your project needs <code style="font-family:var(--mono)">pytest-cov</code> in its own virtualenv; buggy finds a <code style="font-family:var(--mono)">.venv</code> beside the code by itself.</p>
+  <pre class="cmd">pip install buggy-cli
+buggy doctor .        <span class="c"># can this install locate here?</span>
+buggy .               <span class="c"># the line, the commit, the repair — one run of the suite</span>
+buggy . -j 6 -v       <span class="c"># a hive of six worker buggys on the mutation lane, stages timestamped</span>
+buggy icon .          <span class="c"># the pixel bug: twitches while red, click it and it crawls to the line</span>
+buggy vscode-init .   <span class="c"># a task; results land in the Problems pane. Extension: vscode/buggy-0.1.0.vsix</span></pre>
+  <p class="note">The three laws are generated integer kernels with an independent oracle and a self-check each — <code style="font-family:var(--mono)">src/buggy/laws/*.c</code> — and the prompts that produced them are in the repo. AGPL-3.0.</p>
+</div></section>
+
+<footer><div class="wrap"><span>buggy · the body measures, the law rules · <a href="https://github.com/devkancheti4-design/buggy">github</a> · <a href="https://pypi.org/project/buggy-cli/">pypi</a> · <a href="https://github.com/devkancheti4-design/buggy/blob/main/docs/MEASURED.md">measurements</a></span><span>AGPL-3.0-or-later</span></div></footer>
+
+<script id="data" type="application/json">
+{"failing": "test_user_lockout_after_bad_attemps", "pool": 4077, "source": [[24, "    def authenticate(self) -> tuple[str, timedelta] | None:"], [25, "        \"\"\"Attempt to authenticate a user given a username and password\"\"\""], [26, "        settings = get_app_settings()"], [27, "        db = get_repositories(self.session, group_id=None, household_id=None)"], [28, "        user = self.try_get_user(self.data.username)"], [29, ""], [30, "        if not user:"], [31, "            self.verify_fake_password()"], [32, "            return None"], [33, ""], [34, "        if user.auth_method != AuthMethod.MEALIE:"], [35, "            self.verify_fake_password()"], [36, "            self._logger.warning("], [37, "                \"Found user but their auth method is not 'Mealie'. Unable to continue with credentials login\""], [38, "            )"], [39, "            return None"], [40, ""], [41, "        if user.login_attemps > settings.SECURITY_MAX_LOGIN_ATTEMPTS or user.is_locked:"], [42, "            raise UserLockedOut()"], [43, ""], [44, "        if not CredentialsProvider.verify_password(self.data.password, user.password):"], [45, "            user.login_attemps += 1"], [46, "            db.users.update(user.id, user)"], [47, ""], [48, "            if user.login_attemps > settings.SECURITY_MAX_LOGIN_ATTEMPTS:"], [49, "                user_service = UserService(db)"], [50, "                user_service.lock_user(user)"], [51, ""], [52, "            return None"], [53, ""], [54, "        user.login_attemps = 0"], [55, "        user = db.users.update(user.id, user)"], [56, "        return self.get_access_token(user, self.data.remember_me)  # type: ignore"]], "executed": [26, 27, 28, 30, 34, 41, 44, 45, 46, 48, 52, 54, 55, 56], "walk": [{"line": 26, "rank": 2, "bits": ["EF_ALL"]}, {"line": 27, "rank": 2, "bits": ["EF_ALL"]}, {"line": 28, "rank": 2, "bits": ["EF_ALL"]}, {"line": 30, "rank": 2, "bits": ["EF_ALL"]}, {"line": 34, "rank": 2, "bits": ["EF_ALL"]}, {"line": 41, "rank": 7, "bits": ["RECENT", "BISECT", "EF_ALL"]}, {"line": 44, "rank": 2, "bits": ["EF_ALL"]}, {"line": 45, "rank": 2, "bits": ["EF_ALL"]}, {"line": 46, "rank": 2, "bits": ["EF_ALL"]}, {"line": 48, "rank": 7, "bits": ["RECENT", "BISECT", "EF_ALL"]}, {"line": 52, "rank": 2, "bits": ["EF_ALL"]}, {"line": 54, "rank": 2, "bits": ["EF_ALL"]}, {"line": 55, "rank": 2, "bits": ["EF_ALL"]}, {"line": 56, "rank": 2, "bits": ["EF_ALL"]}], "where": [{"file": "credentials_provider.py", "line": 48, "rank": 7, "lanes": ["executed", "recent", "when-commit 92ef083"]}, {"file": "credentials_provider.py", "line": 41, "rank": 7, "lanes": ["executed", "recent", "when-commit 92ef083"]}, {"file": "providers.py", "line": 45, "rank": 7, "lanes": ["executed", "why-divergence"]}], "when": {"commit": "92ef0835bd4db5bced81bbc63e3403e6afb5802b", "subject": "credentials: tidy the lockout comparisons", "runs": 8}, "why": {"file": "mealie/lang/providers.py", "line": 45, "sibling": "test_get_logged_in_user_invalid_token"}, "mutation": [{"file": "credentials_provider.py", "line": 48, "rank": 12, "bits": ["FLIP", "ALL", "CLEAN", "EDIT", "MOVES"], "strong": ["REPAIR", "KIND"], "weak": ["FLIP", "FLOW"], "mutants": [{"edit": "> → >=", "green": true, "clean": true, "note": "test green, nothing broke — a repair"}, {"edit": "> → <", "green": false, "clean": false, "note": "still red, breaks test_superuser_login, test_login_sets_the_session_cookie"}, {"edit": "> → <=", "green": false, "clean": false, "note": "still red, breaks test_superuser_login, test_login_sets_the_session_cookie"}]}, {"file": "credentials_provider.py", "line": 41, "rank": 12, "bits": ["FLIP", "ALL", "CLEAN", "EDIT", "MOVES"], "strong": ["REPAIR", "KIND"], "weak": ["FLIP", "FLOW"], "mutants": [{"edit": "> → >=", "green": true, "clean": true, "note": "test green, nothing broke — a repair"}, {"edit": "> → <", "green": false, "clean": false, "note": "still red, breaks test_failed_login, test_superuser_login, test_login_sets_the_session_cookie"}, {"edit": "> → <=", "green": false, "clean": false, "note": "still red, breaks test_failed_login, test_superuser_login, test_login_sets_the_session_cookie"}, {"edit": "and ↔ or", "green": false, "clean": false, "note": "still red, failure unchanged"}]}], "repairs": [{"file": "credentials_provider.py", "line": 48, "edit": "> → >=", "now": "            if user.login_attemps >= settings.SECURITY_MAX_LOGIN_ATTEMPTS:"}, {"file": "credentials_provider.py", "line": 41, "edit": "> → >=", "now": "        if user.login_attemps >= settings.SECURITY_MAX_LOGIN_ATTEMPTS or user.is_locked:"}], "cost": {"mutants": 196, "total": "9:22 min"}}
+</script>
+<script>
+// ---------- the laws, ported line for line from the C kernels ----------
+const F_CAUSE = x => (x + (x - (x >> 1))) + (x + (x & (4 - x)));
+const F_OM    = x => (x - (x >> 1)) + (x | (x + x));
+const LAWS = {
+  cause: { bits: ["EF_ALL","EP_NONE","IMPORT","BISECT","DIVERGE","FRAME","LITERAL","RECENT"],
+    desc: ["every failing test ran it","no passing test did","import-time only","the bad commit touched it","paths part here","a traceback frame","the assertion's literal","changed lately"],
+    rank(b){ const ef=b[0],ep=b[1],im=b[2],bi=b[3],dv=b[4],fr=b[5],li=b[6],re=b[7];
+      const keep=ef|im, strong=(ef&ep)+bi+dv+(fr&li), nonsil=ef+(bi|re)+dv+(fr|li);
+      return ((0-keep) & (1+nonsil+F_CAUSE(strong))) & 15; },
+    lanes(b){ const ef=b[0],ep=b[1],bi=b[3],dv=b[4],fr=b[5],li=b[6],re=b[7]; const s=[],w=[];
+      (bi?s:re?w:[]).push("TIME"); (ef&&ep?s:ef?w:[]).push("SPECTRUM"); if(dv)s.push("WHY"); (fr&&li?s:(fr||li)?w:[]).push("SYMPTOM"); return [s,w]; },
+    veto: b => !(b[0]|b[2]), vetoText: "not run by every failing test and not import-time — cannot be the cause",
+    presets: [["rich segment.py: ef==F, ep==0, bisect",[1,1,0,1,0,0,0,0]],["mealie line 48: EF_ALL + RECENT + BISECT",[1,0,0,1,0,0,0,1]],["a shared helper every test runs",[1,0,0,0,0,0,0,0]],["frame on a line only one failing test runs",[0,1,0,0,0,1,0,0]]] },
+  omission: { bits: ["ENDED","NEXT","TARGET","HEAD","PASSONLY","RAISED","DIVERGE","RECENT"],
+    desc: ["the run's last executed line","not run, the line before was","the assertion's function / the raising frame","a def or branch head","only passing tests reach it","the failure was an exception","paths part here","changed lately"],
+    rank(b){ const en=b[0],nx=b[1],tg=b[2],hd=b[3],po=b[4],rs=b[5],dv=b[6],rc=b[7];
+      const keep=(en|nx)|tg|(dv|po), strong=en+(tg&hd)+dv, nonsil=(en|nx)+(tg|hd)+(dv|po)+rc;
+      return ((0-keep) & ((1+nonsil+F_OM(strong)) >> (1-rs))) & 15; },
+    lanes(b){ const en=b[0],nx=b[1],tg=b[2],hd=b[3],po=b[4],dv=b[6],rc=b[7]; const s=[],w=[];
+      (en?s:nx?w:[]).push("EDGE"); (tg&&hd?s:(tg||hd)?w:[]).push("SCOPE"); (dv?s:po?w:[]).push("CONTRAST"); if(rc)w.push("TIME"); return [s,w]; },
+    veto: b => !((b[0]|b[1])|b[2]|(b[6]|b[4])), vetoText: "no edge, no contrast, not the target — no reach evidence",
+    presets: [["click bec59289: ENDED+TARGET+HEAD, raised",[1,0,1,1,0,1,0,0]],["rich 720800e6: NEXT+HEAD+PASSONLY",[0,1,0,1,1,0,0,0]],["RECENT only",[0,0,0,0,0,0,0,1]],["ENDED alone, a false assertion",[1,0,0,0,0,0,0,0]]] },
+  mutation: { bits: ["FLIP","ALL","CLEAN","EDIT","MOVES","UNIQUE","BREAKS","SILENT"],
+    desc: ["a mutant greens the judged test","one mutant greens every failing test","and no covering passing test breaks","the flipping mutant is an edit","the failure changes, stays red","the only line that flips","every mutant breaks correct code","nothing changed"],
+    rank(b){ const fl=b[0],al=b[1],cl=b[2],ed=b[3],mv=b[4],uq=b[5],br=b[6];
+      const keep=fl|mv, strong=cl+uq+ed, nonsil=al+fl+ed+mv;
+      return ((0-keep) & ((1+nonsil+F_OM(strong)) >> br)) & 15; },
+    lanes(b){ const fl=b[0],al=b[1],cl=b[2],ed=b[3],mv=b[4],uq=b[5]; const s=[],w=[];
+      (cl?s:al?w:[]).push("REPAIR"); (fl&&uq?s:fl?w:[]).push("FLIP"); if(ed)s.push("KIND"); if(mv)w.push("FLOW"); return [s,w]; },
+    veto: b => !(b[0]|b[4]), vetoText: "no mutant touched the failure",
+    presets: [["mealie line 48: FLIP ALL CLEAN EDIT MOVES",[1,1,1,1,1,0,0,0]],["the 2,000-line file: the same, UNIQUE",[1,1,1,1,0,1,0,0]],["MOVES alone: a constant that changes the value",[0,0,0,0,1,0,0,0]],["deletion-only flip that also BREAKS",[1,0,0,0,0,0,1,0]],["a shared helper: BREAKS alone",[0,0,0,0,0,0,1,0]]] }
+};
+let law = "cause", bits = [0,0,0,0,0,0,0,0];
+function renderCalc(){
+  const L = LAWS[law]; const sw = document.getElementById("switches"); sw.innerHTML = "";
+  L.bits.forEach((n,i) => { const l = document.createElement("label"); l.className = "sw";
+    l.innerHTML = `<input type="checkbox" ${bits[i]?"checked":""}><span><div class="nm">${n}</div><div class="ds">${L.desc[i]}</div></span>`;
+    l.querySelector("input").onchange = e => { bits[i] = e.target.checked?1:0; renderRank(); }; sw.appendChild(l); });
+  const pr = document.getElementById("presets"); pr.innerHTML = "";
+  L.presets.forEach(([t,b]) => { const btn = document.createElement("button"); btn.textContent = t; btn.onclick = () => { bits = b.slice(); renderCalc(); }; pr.appendChild(btn); });
+  document.querySelectorAll("#lawpick button").forEach(b => b.classList.toggle("on", b.dataset.l === law));
+  renderRank();
+}
+function renderRank(){
+  const L = LAWS[law]; const r = L.rank(bits); const [s,w] = L.lanes(bits);
+  document.getElementById("rankv").textContent = r;
+  document.getElementById("rankv").style.color = r===0?"var(--red)":r>=10?"var(--green)":r>=5?"var(--amber)":"var(--fg)";
+  const regime = law==="omission" ? (bits[5]?"":"<br>RAISED = 0: the rank is halved") : law==="mutation" ? (bits[6]?"<br>BREAKS: the rank is halved":"") : "";
+  document.getElementById("lanes").innerHTML = L.veto(bits) ? `<span class="veto">veto (R0): ${L.vetoText}</span>` :
+    `strong: ${s.join(", ")||"—"}<br>weak: ${w.join(", ")||"—"}<br>rank = 1 + weak + F(strong) ${regime}`;
+}
+document.querySelectorAll("#lawpick button").forEach(b => b.onclick = () => { law = b.dataset.l; bits = [0,0,0,0,0,0,0,0]; renderCalc(); });
+renderCalc();
+
+// ---------- the replay, from the actual run ----------
+const D = JSON.parse(document.getElementById("data").textContent);
+const pre = document.getElementById("pre"), bug = document.getElementById("bug"), V = document.getElementById("verdict");
+const lineEls = {};
+D.source.forEach(([n, text]) => { const d = document.createElement("div"); d.className = "ln" + (D.executed.includes(n)?" exec":""); d.dataset.n = n;
+  d.innerHTML = `<span class="n">${n}</span><span class="src"></span><span class="chips"></span>`; d.querySelector(".src").textContent = text; pre.appendChild(d); lineEls[n] = d; });
+function chip(n, name, cls){ const c = document.createElement("span"); c.className = "chip " + cls; c.textContent = name; lineEls[n].querySelector(".chips").appendChild(c); requestAnimationFrame(() => c.classList.add("on")); }
+function row(html, cls){ const r = document.createElement("div"); r.className = "row " + (cls||""); r.innerHTML = html; V.appendChild(r); requestAnimationFrame(() => r.classList.add("on")); return r; }
+function setStage(i, state){ document.querySelectorAll(".stage").forEach(s => { const k = +s.dataset.s; s.classList.toggle("on", k===i && state==="on"); s.classList.toggle("done", k < i || (k===i && state==="done")); }); }
+function moveBug(n){ const el = lineEls[n]; if(!el) return; bug.style.top = (el.offsetTop + 2) + "px"; }
+const sleepMs = ms => new Promise(r => setTimeout(r, ms / (+document.getElementById("speed").value)));
+let running = false, stepMode = false, stepResolve = null, done = false;
+async function pause(ms){ if(stepMode){ await new Promise(r => stepResolve = r); } else await sleepMs(ms); }
+async function run(){
+  if(running) return; running = true; done = false;
+  V.innerHTML = ""; document.querySelectorAll(".ln").forEach(l => { l.className = l.className.replace(/ (visit|win|mut)/g,""); l.querySelector(".chips").innerHTML=""; });
+  bug.classList.remove("twitch"); moveBug(D.source[0][0]);
+  ["st-lines","st-commit","st-mut","st-time"].forEach(id => document.getElementById(id).textContent = "–");
+  setStage(0,"on"); row(`<span class="k">suite</span><br>1,900 tests, one run, per-test coverage …`); await pause(1400);
+  row(`<span class="red">RED</span> — 1 failing: <span class="red">${D.failing}</span>`); document.getElementById("st-lines").textContent = D.pool.toLocaleString(); setStage(0,"done"); await pause(900);
+  setStage(1,"on"); row(`<span class="k">where — the cause law</span>`); bug.classList.add("twitch");
+  for(const w of D.walk){ moveBug(w.line); lineEls[w.line].classList.add("visit"); await pause(260);
+    w.bits.forEach(b => chip(w.line, b, /EF_ALL|BISECT|DIVERGE/.test(b)?"s":"w")); await pause(180); }
+  for(const f of D.where.slice(0,3)){ row(`${f.rank>=7?'<span class="green">':'<span>'}${f.rank}/15</span> ${f.file}:${f.line} <span class="amber">${f.lanes.join(", ")}</span>`); }
+  moveBug(D.where[0].line); lineEls[D.where[0].line].classList.add("win"); setStage(1,"done"); await pause(900);
+  setStage(2,"on"); row(`<span class="k">when — bisect</span><br>${D.when.runs} test runs → <span class="blue">${D.when.commit.slice(0,8)}</span> "${D.when.subject}"`); document.getElementById("st-commit").textContent = D.when.commit.slice(0,8); setStage(2,"done"); await pause(1100);
+  setStage(3,"on"); row(`<span class="k">why — trace</span><br>paths part at ${D.why.file}:${D.why.line} against ${D.why.sibling}`); setStage(3,"done"); await pause(1000);
+  setStage(4,"on"); row(`<span class="k">change — the mutation law</span>`);
+  for(const m of D.mutation.slice(0,2)){ moveBug(m.line); lineEls[m.line].classList.add("mut");
+    for(const mu of m.mutants){ const r = row(`&nbsp;&nbsp;${m.line}: <span class="violet">${mu.edit}</span> … `); await pause(500); r.innerHTML += mu.green ? `<span class="green">test green${mu.clean?", nothing broke — a repair":""}</span>` : `<span class="red">${mu.note}</span>`; }
+    m.bits.forEach(b => chip(m.line, b, "v")); row(`<span class="violet">mutation ${m.rank}/15</span> ${m.file}:${m.line} — strong: ${m.strong.join(", ")||"—"}; weak: ${m.weak.join(", ")||"—"}`); await pause(600); }
+  document.getElementById("st-mut").textContent = D.cost.mutants; document.getElementById("st-time").textContent = D.cost.total;
+  for(const r of D.repairs.slice(0,2)) row(`<span class="green">repair</span> ${r.file}:${r.line} <span class="violet">${r.edit}</span> → <code>${r.now.trim()}</code>`);
+  moveBug(D.where[0].line); bug.classList.remove("twitch"); setStage(4,"done"); running = false; done = true;
+  document.getElementById("hint").textContent = "That was the actual run, replayed. Every chip is a measured bit.";
+}
+document.getElementById("play").onclick = () => { stepMode = false; if(!running) run(); else if(stepResolve){ const r = stepResolve; stepResolve = null; r(); } };
+document.getElementById("step").onclick = () => { stepMode = true; if(!running) run(); else if(stepResolve){ const r = stepResolve; stepResolve = null; r(); } };
+document.getElementById("replay").onclick = () => { if(!running){ stepMode = false; run(); } };
+new IntersectionObserver((es) => { if(es[0].isIntersecting && !running && !done) { run(); } }, {threshold: .4}).observe(document.getElementById("demo"));
+</script>
+</body>
+</html>
