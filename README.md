@@ -121,6 +121,16 @@ say what they measured.
 | two runs on one project, both wrong | the suite shares state (a SQLite file, a temp dir) | never run two locates on one checkout at once |
 | bisect blames the commit on top | stale bytecode when file sizes match across revisions | buggy purges it; never trust `.pyc` across checkouts |
 | *at least as old as …* far back in history | the test is red there because the feature did not exist yet | read the bound as a bound |
+| *cannot judge: the tests could not be collected / collected no tests / internal error / exit N* | the suite did not run to a verdict | fix the suite first; buggy never reports green unless pytest exited 0 |
+
+## What `buggy scan` exposes
+
+The scan page listens on `127.0.0.1` only. Its source endpoint serves `.py` files inside the listed
+projects and nothing else: the path is resolved, so an absolute path, `..`, or a symlink that leaves the
+project is refused. Every request must carry a local `Host` header (a page rebound to your address by
+DNS is refused), and a scan can only be started with a header a browser cannot attach cross-origin.
+`tests/test_scan_is_confined.py` pins all four. Before 2026-09-24 an absolute `file=` read outside the
+project; that is fixed.
 
 ## Layout
 
