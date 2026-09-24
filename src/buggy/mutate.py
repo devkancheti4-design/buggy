@@ -30,7 +30,9 @@ _SIMPLE = (ast.Expr, ast.Assign, ast.AugAssign, ast.AnnAssign, ast.Return, ast.R
            ast.Global, ast.Nonlocal, ast.Import, ast.ImportFrom, ast.Continue, ast.Break)
 _SKIP = {".git", ".venv", "venv", "node_modules", "__pycache__", ".pytest_cache", ".buggy", ".fluidfix", "dist",
          "build", ".mypy_cache", ".ruff_cache", ".tox", ".nox", ".idea", ".coverage"}
-_FAILED = re.compile(r"^(?:FAILED|ERROR) (\S+?)(?: - .*)?$", re.M)
+# a summary line is "FAILED <id> - <message>" or "ERROR <id>"; the id may contain SPACES (a parametrized id
+# such as test_x[no-wrap mark-sentence < max]), so it is everything up to pytest's " - " separator, never \S+
+_FAILED = re.compile(r"^(?:FAILED|ERROR) (.+?)(?: - .*)?$", re.M)
 
 
 @dataclass
