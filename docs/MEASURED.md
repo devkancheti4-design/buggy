@@ -71,7 +71,7 @@ imports and assignments guarded; an error raised *in the test file* under that f
 could not be evaluated there, a skip, while a failure raised in the code under test is still a verdict.
 Carrying everything the old file lacked was tried first and shrank the reach on click from 2014 to 2026.
 
-## Two laws, side by side — never blended
+## Three laws, side by side — never blended
 
 **The CAUSE law** ranks the lines the failing test *executed*: four evidence lanes (TIME, SPECTRUM, WHY,
 SYMPTOM) graded strong or weak from eight measured bits, priority = the dense lexicographic rank of
@@ -206,3 +206,46 @@ literal and recency bits measured, because on the first run of `762c97ee` the gu
 candidates at all. The adversarial battery (`examples/locate/adversarial.py`) held at 6.5/10 through all
 of it; its one WEAK case, the 2,000-line file of coverage-identical lines, sits at 218.5 in the presented
 order inside a band of 84 lines the law alone cannot tell apart.
+
+
+## The MUTATION law — an experiment on each line, 2026-09-24
+
+The cause law's weakness on real bugs is structural: one bit fires and the spectrum orders the rest. The
+mutation law reads eight facts about what happens when a line is *changed*: `laws/mutation.c`, generated,
+45 reachable words, 0 violations, seven anchors; `docs/laws/MUTATION_LAW_PROMPT.md` is what asked for it.
+The body (`src/buggy/mutate.py`) makes mutants by operator on the line's own text, copies the project once,
+and runs each mutant against the failing tests and a sample of three passing tests that execute the line.
+The budget is a measurement, reported with every verdict.
+
+| case | cause law | **mutation law** | cost |
+|---|---|---|---|
+| adversarial battery, 11 cases | 6.5 | **9.5** — guilty line first in 9 | seconds, except 900 mutants / 3 min on each 2,000-line file |
+| mealie, planted lockout off-by-one, 41k lines | 1, 2 | **1, 2**, repair `> → >=` named on both | 44 mutants, 246 s |
+| click `762c97ee`, 12.1 years, core.py 3,635 lines | 28 | **1** | 400 mutants, 656 s |
+| click `70c673d3`, 10.6 years | 11 | 42 | 396 mutants, 104 s |
+| click `2468b709`, 11.9 years, termui.py | 20 | **3** | 398 mutants, 691 s |
+| click `c326df95`, pure omission | miss | miss — but a real one-token repair found: `cleanup=False → True` in `ctx.scope` | 400 mutants, 110 s |
+
+Read it straight:
+
+- **Where a one-token edit can flip the failing test, the experiment finds the line.** The twelve-year-old
+  double-bracketing bug moves from rank 28 to rank 1 in a 3,635-line file: inverting `if not self.required`
+  turns the test green. Mealie names the exact repair on both changed lines.
+- **Where the real fix is many lines, no mutant flips** (`70c673d3`, eight lines changed): every measured
+  line carries only `MOVES`, the law ranks them by the spectrum, and the cause law's 11 stands beside the
+  mutation law's 42. Three columns, never blended.
+- **A repair the maintainer did not write is still a repair.** On the omission case the law found that
+  `ctx.scope(cleanup=True)` also greens the suite. The certification gates are what decide whether such an
+  edit is acceptable; the lane only reports it.
+- **The additive pipeline is the honest failure.** With a sum-only test, ~80 lines each have a one-token
+  edit that greens the suite; the law reports the band. The multiplicative variant, where only the wrong
+  step can compensate, lands at 1.5 (tied with the other line of the guilty function).
+- **Cost.** A mutant costs one pytest start plus the sampled tests: 0.2 s on a small repo, 1.6 s on click,
+  5.6 s on mealie. The default budget (300 mutants or 240 s) measures the top of the cause law's order and
+  reports how many lines it cut.
+
+Traps the lane fell into on the way: a test that spawns something which outlives pytest inherits the
+output pipe, and `subprocess.run(capture_output=True)` then waits forever — a mealie run sat 26 minutes in
+`select()` with no child alive. The lab now writes output to a file and kills the whole process group on
+timeout. And a machine with six orphaned editor language-server processes burning ten cores made every
+number of the day five times slower until they were found; `python -c pass` took 6 s.

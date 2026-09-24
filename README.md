@@ -60,8 +60,17 @@ the status-bar bug, the crawl through your executed lines, and the gutter mark o
   revision is green it says so: *at least as old as \<commit\> (\<date\>)*.
 - **WHY.** The failing test traced through pytest against its nearest passing neighbour, to the first
   line where the paths part or a local differs.
+- **What happens when the line is changed.** Coverage says which lines were there; it cannot say which
+  line matters. The **mutation law** ranks lines by an experiment: each candidate is altered one operator
+  at a time — relational, arithmetic, off-by-one, boolean, constant, return, deletion — in a copy of the
+  project, against the failing tests and a sample of the passing tests that execute the line. Eight facts
+  about what happened (did the failing test turn green, did every failing test, did any passing test turn
+  red, was it an edit or a deletion, did the failure change, is this the only line that flips) become the
+  rank. A mutant that turns the whole set green is reported as a one-token repair. On by default with a
+  budget (`--mutants 300 --mutate-seconds 240`, `--no-mutate` to skip); off in the editor extension unless
+  `buggy.mutate` is set, because it costs minutes on a large suite.
 
-Both laws are generated integer kernels, `src/buggy/laws/*.c`, each with an independent oracle and a
+All three laws are generated integer kernels, `src/buggy/laws/*.c`, each with an independent oracle and a
 self-check; the prompts that produced them are in `docs/laws/`. No number in them is a weight: lanes are
 counted, one strong lane beats any number of weak ones, and the ranking is the dense lexicographic rank
 of (strong, weak). The body measures; the law rules.
@@ -70,19 +79,25 @@ of (strong, weak). The body measures; the law rules.
 
 `docs/MEASURED.md` has the tables. The short version, read straight:
 
-- **Planted bug in a real project** (Mealie, above): the two changed lines at ranks 1 and 2, the commit
-  named. Easy for an engineer too; the point is that it costs nothing and runs unattended.
-- **Ten adversarial cases** (`examples/adversarial.py`): exact on 4, top 5 on 5, one genuine weakness — a
-  2,000-line file of coverage-identical lines, where nothing distinguishes them and the guilty line sits
-  around rank 220. Score 6.5/10.
-- **35 real fixes from rich, held out**: guilty file first in 21, guilty line in the top 10 in 12, never a
-  candidate in 7 (omissions the failing test never ran).
-- **The five longest-lived real bugs found**, 8 to 12 years old, 900 to 5,000-line files, blind: the
-  guilty line at rank 28, 11, 20 and 32 of the executed lines, the pure omission missed. On bugs like
-  these only one bit fires and the spectrum does the ordering: a reading list, not the line.
+- **Planted bug in a real project** (Mealie, above): the cause law puts the two changed lines at ranks 1
+  and 2 and bisect names the commit; the mutation law puts the same two lines first and names the repair,
+  `>` back to `>=`, on both. Easy for an engineer too; the point is that it costs nothing and runs
+  unattended.
+- **Eleven adversarial cases** (`examples/adversarial.py`): under the cause law 6.5/11; under the mutation
+  law **9.5/11**, the guilty line first in nine. The exception is honest: an additive pipeline with a
+  sum-only test, where about 80 lines each have a one-token edit that greens the suite, and the law says
+  so instead of picking one.
+- **35 real fixes from rich, held out** (cause law): guilty file first in 21, guilty line in the top 10 in
+  12, never a candidate in 7 (omissions the failing test never ran).
+- **The longest-lived real bugs found**, 8 to 12 years old, 900 to 5,000-line files, blind. Cause law:
+  rank 28, 11, 20, and a miss. Mutation law on the same four: **1**, 42, **3**, and a different one-token
+  repair than the maintainer's, at 400 mutants each. Where a single edit can flip the test the experiment
+  finds it in a 3,600-line file; where the real fix is eight lines, no mutant flips and the cause law's
+  verdict stands beside it.
 
-So: when several lanes agree it is exact; when they do not it hands you a short list. It is a pre-filter
-you run first because it is free, not a replacement for whoever reads next.
+So: the cause law is a free shortlist from circumstance; the mutation law is a paid experiment that turns
+the shortlist into a line when a one-token repair exists. Neither replaces whoever reads next, and both
+say what they measured.
 
 ## What you will get wrong setting it up
 
@@ -101,6 +116,8 @@ you run first because it is free, not a replacement for whoever reads next.
 src/buggy/locate.py     the three lanes, the pool, the two regimes, the bisect step
 src/buggy/cause.py      the CAUSE law (port of laws/cause.c)
 src/buggy/omission.py   the OMISSION law (port of laws/omission.c)
+src/buggy/mutation.py   the MUTATION law (port of laws/mutation.c)
+src/buggy/mutate.py     the mutation lane's body: mutants, the project copy, the runs
 src/buggy/float_icon.py the pixel bug (Tk, standard library only)
 src/buggy/scan.py       the workspace scan page
 vscode/                 the editor extension

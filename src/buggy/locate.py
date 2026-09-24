@@ -27,6 +27,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from .cause import cause as _cause, word as _word
+from .mutation import mutation as _mutation, word as _mword, BITS as _MBITS, lanes as _mlanes
 from .omission import omission as _omission, word as _oword, BITS as _OBITS
 
 _FRAME = re.compile(r"([\w./\\-]+\.py)[\":,]+\s*(?:line\s+)?(\d+)")
@@ -64,6 +65,9 @@ class Located:
     law_ranked: bool = True             # False when EF_ALL could not be measured, so the law could not rule
     omission: list = field(default_factory=list)   # Findings ranked by the OMISSION law: where missing code belongs
     raised: bool = False                # the failure was an exception, not a false assertion
+    mutation: list = field(default_factory=list)   # Findings ranked by the MUTATION law: what happens when a line is changed
+    mutation_cost: dict = field(default_factory=dict)   # lines measured, mutants, test runs, seconds, lines the budget cut
+    repairs: list = field(default_factory=list)    # CLEAN mutants: a one-token edit that turns the failing set green
 
     def render(self) -> str:
         if self.status == "green":
@@ -91,6 +95,21 @@ class Located:
             for i, f in enumerate(self.omission[:3], 1):
                 out.append(f"  {i}. {f.file}:{f.line}   {f.source.strip()[:60]}")
                 out.append(f"       omission {f.rank:>2}/15  [{', '.join(f.lanes)}]")
+        if self.mutation_cost:
+            c = self.mutation_cost
+            head = (f"by what happens when each line is CHANGED — the mutation law ({c.get('measured', 0)} lines measured, "
+                    f"{c.get('mutants', 0)} mutants, {c.get('runs', 0)} test runs, {c.get('seconds', 0)} s"
+                    + (f", {c['cut']} lines cut by the budget" if c.get("cut") else "") + "):")
+            out.append(head)
+            live = [f for f in self.mutation if f.rank > 0]
+            for i, f in enumerate(live[:3], 1):
+                s_, w_ = _mlanes(f.bits)
+                out.append(f"  {i}. {f.file}:{f.line}   {f.source.strip()[:60]}")
+                out.append(f"       mutation {f.rank:>2}/15  [strong: {', '.join(s_) or '—'}; weak: {', '.join(w_) or '—'}]")
+            if not live and c.get("measured"):
+                out.append("  (no mutant of any measured line touched the failure)")
+            for r in self.repairs[:2]:
+                out.append(f"  a one-token edit turns the failing set green: {r['file']}:{r['line']}  {r['edit']}  →  {r['now'].strip()[:60]}")
         if self.when and self.when.get("commit"):
             w = self.when
             out.append(f"when: {w['commit'][:8]} \"{w['subject']}\" introduced the failure "
@@ -794,7 +813,8 @@ def why(root: str, python: str, out: str, failing: list[str]) -> dict:
 # ------------------------------------------------------------------ all three
 def locate(root: str, python: str = sys.executable, good: str | None = None, bisect: bool = True,
            trace: bool = True, top_files: int = 3, extra_args: list | None = None,
-           progress=None, overlay: dict | None = None, lookback: int = 24, budget_s: int = 300) -> Located:
+           progress=None, overlay: dict | None = None, lookback: int = 24, budget_s: int = 300,
+           mutate: bool = True, mutants: int = 300, mutate_s: int = 240) -> Located:
     """extra_args are passed to every pytest run (e.g. -W default, --deselect id): what an old revision
     needs to collect and to be green apart from the bug under study."""
     t0 = time.time()
@@ -995,6 +1015,33 @@ def locate(root: str, python: str = sys.executable, good: str | None = None, bis
         L.omission = om[:8]
     except Exception as e:
         L.notes.append(f"omission lane could not run ({type(e).__name__}: {str(e)[:80]})")
+    # ---------------------------------------------------------------- THE MUTATION REGIME, beside both
+    # An experiment on each line, in the presented order, until the budget ends: mutants against the failing
+    # tests and a sample of the passing tests that execute the line, in a copy of the project.
+    if mutate and L.failing and L.where:
+        tell("mutation", "mutants of the top candidates, against the tests that execute them")
+        try:
+            from .mutate import measure
+            order = [(f.file, f.line) for f in L.where if f.rank > 0]
+            contexts = getattr(spectrum, "last_contexts", None) or {}
+            covering = {k: sorted(set(v) - {"<import>"}) for k, v in contexts.items()}
+            M = measure(root, python, L.failing_all or L.failing, L.failing[0], order, covering, o.extra_args,
+                        budget_mutants=mutants, budget_s=mutate_s, progress=tell)
+            L.mutation_cost = {k: M.get(k, 0) for k in ("measured", "mutants", "runs", "seconds", "cut")}
+            L.repairs = M.get("repairs", [])
+            if M.get("note"):
+                L.notes.append("mutation lane: " + M["note"])
+            mm = []
+            for f in L.where:
+                b = M["lines"].get((f.file, f.line))
+                if not b:
+                    continue
+                g = Finding(f.file, f.line, f.source, [k for k in _MBITS if b.get(k)], 0)
+                g.bits = dict(b); g.rank = _mutation(_mword(b)); g.ochiai = f.ochiai; mm.append(g)
+            mm.sort(key=lambda g: (-g.rank, -g.ochiai, g.file, g.line))
+            L.mutation = mm
+        except Exception as e:
+            L.notes.append(f"mutation lane could not run ({type(e).__name__}: {str(e)[:80]})")
     L.seconds = round(time.time() - t0, 2)
     tell("done", f"{L.status}")
     try:
@@ -1003,6 +1050,7 @@ def locate(root: str, python: str = sys.executable, good: str | None = None, bis
             {"status": L.status, "failing": L.failing, "failing_all": L.failing_all, "where": [asdict(f) for f in L.where[:8]],
              "vetoed": L.vetoed, "law_ranked": L.law_ranked, "raised": L.raised,
              "omission": [asdict(f) for f in L.omission[:5]],
+             "mutation": [asdict(f) for f in L.mutation[:8]], "mutation_cost": L.mutation_cost, "repairs": L.repairs[:3],
              # the WALK: every executed line of the top file in file order, each with the law's rank —
              # the path a pixel bug can crawl, honestly, ending where the law ruled
              "walk": ({"file": L.where[0].file, "winner": L.where[0].line,

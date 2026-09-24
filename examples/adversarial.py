@@ -85,7 +85,7 @@ def _():
     L = locate(root, bisect=False); return L, ("pkg/m.py", {5})
 
 # G. a 2,000-line file, one wrong line deep inside a 60-step pipeline; passing tests also run that line
-@case("2,000-line file", "one wrong line in step 37 of 60; passing tests touch the same functions")
+@case("2,000-line file, 80 repairs", "additive steps, sum-only test: an off-by-one in any step compensates, so ~80 lines are honest one-token repairs")
 def _():
     fns = "".join(f"def step{i}(x):\n    y = x + {i}\n    z = y - {i}\n    return z\n\n\n" for i in range(200))
     fns = fns.replace("def step37(x):\n    y = x + 37\n    z = y - 37\n", "def step37(x):\n    y = x + 37\n    z = y - 36\n")
@@ -94,8 +94,23 @@ def _():
     tests += "".join(f"def test_s{i}():\n    assert step{i}(1) == (1 if {i} != 37 else 2)\n\n\n" for i in range(0, 60, 3))
     tests += "def test_pipeline():\n    assert pipeline(0) == 0\n"
     root = repo({"pkg/big.py": fns + pipe, "tests/test_big.py": tests})
-    L = locate(root, bisect=False)
+    L = locate(root, bisect=False, mutants=1500, mutate_s=1200)
     truth = next(i + 1 for i, l in enumerate((root / "pkg/big.py").read_text().split("\n")) if l == "    z = y - 36")
+    return L, ("pkg/big.py", {truth})
+
+# G2. the same size, but the steps are multiplicative identities and the test's input is 7: an off-by-one
+#     elsewhere cannot compensate, so exactly one line has a one-token repair — the mutation law's anchor
+@case("2,000-line file, one repair", "sixty identity steps x*5//5; step 37 divides by 4; only its divisor can flip the test")
+def _():
+    fns = "".join(f"def step{i}(x):\n    y = x * 5\n    z = y // 5\n    return z\n\n\n" for i in range(200))
+    fns = fns.replace("def step37(x):\n    y = x * 5\n    z = y // 5\n", "def step37(x):\n    y = x * 5\n    z = y // 4\n")
+    pipe = "def pipeline(x):\n" + "".join(f"    x = step{i}(x)\n" for i in range(60)) + "    return x\n"
+    tests = "from pkg.big import pipeline, " + ", ".join(f"step{i}" for i in range(0, 60, 3)) + "\n\n\n"
+    tests += "".join(f"def test_s{i}():\n    assert step{i}(7) == 7\n\n\n" for i in range(0, 60, 3))
+    tests += "def test_pipeline():\n    assert pipeline(7) == 7\n"
+    root = repo({"pkg/big.py": fns + pipe, "tests/test_big.py": tests})
+    L = locate(root, bisect=False, mutants=1500, mutate_s=1200)
+    truth = next(i + 1 for i, l in enumerate((root / "pkg/big.py").read_text().split("\n")) if l == "    z = y // 4")
     return L, ("pkg/big.py", {truth})
 
 # H. two unrelated bugs at once — EF_ALL demands every failing test; both guilty lines fail it
@@ -127,9 +142,9 @@ def _():
     return L, ("pkg/m.py", {2})
 
 def main():
-    print(f"{'case':28} {'cause':>7} {'tie':>4} {'omission':>9} {'when':>6}  verdict")
-    print("-" * 96)
-    passed = 0
+    print(f"{'case':28} {'cause':>7} {'tie':>4} {'omission':>9} {'mutation':>9} {'cost':>16} {'when':>6}  verdict")
+    print("-" * 118)
+    passed = 0; mpassed = 0
     for name, hint, fn in CASES:
         try:
             out = fn()
@@ -137,6 +152,12 @@ def main():
             print(f"{name:28} {'crash':>7} {'':>4} {'':>9} {'':>6}  FAIL — {type(e).__name__}: {str(e)[:50]}"); continue
         L, (file, lines), *mode = out
         cr, tie = rank_of(L.where, file, lines); orank, _ = rank_of(L.omission, file, lines)
+        live = [f for f in L.mutation if f.rank > 0]
+        mr, _ = rank_of(live, file, lines)
+        c = L.mutation_cost or {}
+        cost = f"{c.get('mutants', 0)}m/{c.get('runs', 0)}r/{int(c.get('seconds', 0))}s" if c else "off"
+        if mr is not None and mr <= 1: mpassed += 1
+        elif mr is not None and mr <= 5: mpassed += 0.5
         when_ok = ""
         if getattr(L, "_bug_sha", None):
             when_ok = "yes" if L.when and L.when["commit"] == L._bug_sha else "no"
@@ -148,10 +169,10 @@ def main():
         if when_ok == "no": verdict += " / WHEN wrong"
         if when_ok == "yes": verdict += " / WHEN right"
         if len(L.failing_all) > len(L.failing): verdict += f" / {len(L.failing_all)} failing, judged the first"
-        print(f"{name:28} {str(cr):>7} {tie:>4} {str(orank):>9} {when_ok:>6}  {verdict}")
+        print(f"{name:28} {str(cr):>7} {tie:>4} {str(orank):>9} {str(mr):>9} {cost:>16} {when_ok:>6}  {verdict}")
         print(f"{'':28} {hint}")
         if L.notes: print(f"{'':28} notes: {'; '.join(L.notes)[:110]}")
-    print("-" * 96); print(f"score {passed}/{len(CASES)}")
+    print("-" * 118); print(f"score {passed}/{len(CASES)}   under the mutation law alone: {mpassed}/{len(CASES)}")
 
 if __name__ == "__main__":
     main()

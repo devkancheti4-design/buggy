@@ -58,6 +58,11 @@
           "type": "boolean",
           "default": true,
           "description": "Locate again when a .py file is saved."
+        },
+        "buggy.mutate": {
+          "type": "boolean",
+          "default": false,
+          "description": "Also run the mutation lane: mutants of the top lines against the tests that execute them (minutes on a large suite)."
         }
       }
     }

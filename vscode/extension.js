@@ -32,7 +32,7 @@ function run(args, cwd) {
 async function locate(folder, quiet) {
   const root = folder.uri.fsPath;
   setStatus("$(bug) locating…", "busy", root);
-  const args = ["locate", root, "--json"]; if (!cfg("bisect")) args.push("--no-bisect");
+  const args = ["locate", root, "--json"]; if (!cfg("bisect")) args.push("--no-bisect"); if (!cfg("mutate")) args.push("--no-mutate");
   if (cfg("python")) args.push("--python", cfg("python"));
   const r = await run(args, root);
   let L = null; try { L = JSON.parse(r.so.slice(r.so.indexOf("{"))); } catch (e) {}

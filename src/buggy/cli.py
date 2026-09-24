@@ -13,8 +13,14 @@ from . import __version__
 
 def cmd_locate(a) -> int:
     from .locate import locate, project_python
+    import time as _t
+    t0 = _t.time()
+    def tell(stage, detail=""):
+        if a.verbose:
+            print(f"[{int(_t.time() - t0) // 60:02d}:{int(_t.time() - t0) % 60:02d}] {stage:9} {detail[:100]}", file=sys.stderr, flush=True)
     L = locate(a.root, python=a.python or project_python(a.root), good=a.good, bisect=not a.no_bisect,
-               trace=not a.no_trace)
+               trace=not a.no_trace, mutate=not a.no_mutate, mutants=a.mutants, mutate_s=a.mutate_seconds,
+               progress=tell)
     if a.json:
         from dataclasses import asdict
         d = asdict(L); d.pop("_vetoed_list", None); print(json.dumps(d, indent=1))
@@ -173,6 +179,10 @@ def main(argv=None) -> int:
                                       "bisect), WHY (first divergence from a passing test)")
     l.add_argument("root", nargs="?", default="."); l.add_argument("--good", help="a revision known green (else searched)")
     l.add_argument("--no-bisect", action="store_true"); l.add_argument("--no-trace", action="store_true")
+    l.add_argument("--no-mutate", action="store_true", help="skip the mutation lane (the experiment on each line)")
+    l.add_argument("-v", "--verbose", action="store_true", help="print each stage with a timestamp, on stderr")
+    l.add_argument("--mutants", type=int, default=300, help="mutation lane budget: mutants (default 300)")
+    l.add_argument("--mutate-seconds", type=int, default=240, help="mutation lane budget: seconds (default 240)")
     l.add_argument("--python", help="the interpreter that runs the suite (default: the project's .venv)")
     l.add_argument("--json", action="store_true")
     l.add_argument("--format", choices=["text", "vscode"], default="text", help="vscode: file:line: message per finding")

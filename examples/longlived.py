@@ -48,7 +48,7 @@ for fix, born in pairs:
     # BLIND: no --good hint. The locator must find a green revision itself or say the fault is older than
     # the test's reach.
     L = locate(str(work), python=py, bisect=True, good=None, overlay=overlay, extra_args=BASE + desel,
-               lookback=4000, budget_s=1500)
+               lookback=4000, budget_s=1500, mutants=400, mutate_s=900)
     def mark(f): return "  <== TRUTH" if (f.file == rel and f.line in truth) else ""
     print(f"\nWHERE — by the cause law (top 8 of {len(L.where)} lines every failing test executed; {L.vetoed} vetoed):")
     for i, f in enumerate(L.where[:8], 1): print(f"  {i:>2}. {f.file[-30:]}:{f.line:<5} cause {f.rank:>2}  {f.source.strip()[:50]:50}{mark(f)}")
@@ -58,6 +58,12 @@ for fix, born in pairs:
     for i, f in enumerate(L.omission[:5], 1): print(f"  {i:>2}. {f.file[-30:]}:{f.line:<5} omission {f.rank:>2}  {f.source.strip()[:46]:46}{mark(f)}")
     orr = next((i + 1 for i, f in enumerate(L.omission) if f.file == rel and f.line in truth), None)
     print(f"  truth line's rank under the omission law: {orr}   (raised: {L.raised})")
+    live = [f for f in L.mutation if f.rank > 0]; c = L.mutation_cost or {}
+    print(f"WHAT HAPPENS WHEN EACH LINE IS CHANGED — the mutation law (top 5 of {len(live)} touched; "
+          f"{c.get('measured', 0)} lines measured, {c.get('mutants', 0)} mutants, {c.get('runs', 0)} runs, {c.get('seconds', 0)} s, {c.get('cut', 0)} cut):")
+    for i, f in enumerate(live[:5], 1): print(f"  {i:>2}. {f.file[-30:]}:{f.line:<5} mutation {f.rank:>2}  {f.source.strip()[:46]:46}{mark(f)}")
+    mr = next((i + 1 for i, f in enumerate(live) if f.file == rel and f.line in truth), None)
+    print(f"  truth line's rank under the mutation law: {mr}" + (f"   repair: {L.repairs[0]['edit']} → {L.repairs[0]['now'].strip()[:50]}" if L.repairs else ""))
     if L.when and L.when.get("commit"):
         hit = L.when["commit"] == sh(["git", "rev-parse", born], cwd=work).stdout.strip()
         print(f"WHEN — bisect says {L.when['commit'][:8]} \"{L.when['subject'][:50]}\" ({L.when['runs']} runs)  {'== the birth commit' if hit else '(birth commit was ' + born[:8] + ')'}")

@@ -74,3 +74,18 @@ def test_tree_untouched_by_bisect(tmp_path):
     assert (root / "pkg/quote.py").read_bytes() == before
     assert subprocess.run(["git", "-C", root, "rev-parse", "HEAD"], capture_output=True, text=True).stdout == head
     assert not subprocess.run(["git", "-C", root, "worktree", "list"], capture_output=True, text=True).stdout.count("\n") > 1
+
+
+def test_the_mutation_law_finds_the_repair(tmp_path):
+    """`total + 2` should be `total * 2`: one arithmetic mutant turns the failing test green and breaks nothing."""
+    root = make(tmp_path)
+    L = locate(root, bisect=False, trace=False)
+    assert L.mutation_cost["measured"] >= 1 and L.mutation_cost["mutants"] >= 1, L.render()
+    top = L.mutation[0]
+    assert (top.file, top.line) == ("pkg/quote.py", 7), L.render()
+    assert top.bits["FLIP"] and top.bits["ALL"] and top.bits["CLEAN"] and top.bits["EDIT"], top.bits
+    assert top.rank >= 11, top.rank
+    assert L.repairs and L.repairs[0]["edit"] == "+ → *" and "total * 2" in L.repairs[0]["now"], L.repairs
+    assert "mutation law" in L.render()
+    # the user's tree was never touched
+    assert (root / "pkg/quote.py").read_text() == QUOTE_BAD
